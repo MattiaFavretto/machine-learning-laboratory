@@ -1,19 +1,25 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import optax
-from jax import grad, jit, vmap
-from jax import numpy as jnp
-from jax import random as rnd
+from jax import grad, jit, vmap, jnp, rnd
 
+# declaring variables 
+
+learning_rate = 0.001
+seed = 1701
+tolerance = 1e-10
+epochs = 1000
+prev_loss = float("inf")
 error_list = []
 
+# importing datas
 x_raw = np.load("data_x.npy")
 y_raw = np.load("data_y.npy")
 
 x = jnp.array(x_raw)
 y_true = jnp.array(y_raw).flatten()
 
-seed = 1701
+
 k1 = rnd.key(seed)
 k2 = rnd.key(seed)
 k3 = rnd.key(seed)
@@ -44,18 +50,15 @@ def neural_network(x, w1, w2, w3):
 
     return sum
 
-
 network_vmap = vmap(neural_network, in_axes=(0, None, None, None))
-
 
 def loss_function(input, y_true, w1, w2, w3):
     y_pred = network_vmap(input, w1, w2, w3)
     return jnp.mean((y_pred - y_true) ** 2)
 
-
 loss_function_grad = grad(loss_function, argnums=(2, 3, 4))
 
-learning_rate = 0.001
+# using the adam optimizer
 optimizer = optax.adam(learning_rate=learning_rate) # create the optimazer for this learning rate
 opt_state = optimizer.init((w1, w2, w3)) # initialize the optimazer
 
@@ -72,13 +75,8 @@ def update_weights(x, y_true, w1, w2, w3, opt_state):
 
     return error, w1, w2, w3, opt_state
 
-
 update_weights_jit = jit(update_weights)
 
-
-tolerance = 1e-10
-epochs = 1000
-prev_loss = float("inf")
 for i in range(epochs):
     error, w1, w2, w3, opt_state = update_weights_jit(x, y_true, w1, w2, w3, opt_state)
     current_loss = error
@@ -88,8 +86,8 @@ for i in range(epochs):
         break
 
     prev_loss = current_loss
-print(error_list)
 
+# plotting the result
 plt.figure(figsize=(10, 10))
 plt.plot(error_list)
 plt.grid(True)

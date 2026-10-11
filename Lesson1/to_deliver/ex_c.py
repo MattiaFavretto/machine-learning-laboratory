@@ -1,10 +1,10 @@
-from jax import jit
-from jax import numpy as jnp
+from jax import jit, rnd, numpy as jnp
 
-# attenzione che jnp.max cerca il massimo in un array, non fra due elementi
-# ATTENZIONE, NON POSSO USARE FUNZIONI CLASSICHE DI PYTHON, NEMMENO COME MAX
+seed = 1701
+k = rnd.key(seed)
+input = rnd.normal(k, (4, 2))
 
-input = jnp.array([[0,1],[2,3],[3,4],[5,-1]])
+input = jnp.array([[0.0,1.0],[2.0,3.0],[3.0,4.0],[5.0,-1.0]]) 
 
 def dense_layer(x):
     # input: array containing both inputs and weights
@@ -14,7 +14,6 @@ def dense_layer(x):
     # Applying the ReLU activation function with the max
     return jnp.maximum(0,sum)
 
-# result = dense_layer(input)
 dense_layer_jit = jit(dense_layer)
 result = dense_layer_jit(input)
 print(result)

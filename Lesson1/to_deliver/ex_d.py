@@ -2,17 +2,15 @@ from jax import jit, random as rnd, grad, numpy as jnp, vmap
 import numpy as np
 import matplotlib.pyplot as plt
 
-# attenzione che jnp.max cerca il massimo in un array, non fra due elementi
-# ATTENZIONE, NON POSSO USARE FUNZIONI CLASSICHE DI PYTHON, NEMMENO COME MAX
-# ATTENZIONE, IN JAX GLI ARRAY SONO IMMUTABILI, devo usare delle liste
+# DECLARING VARIABLES
+seed = 1701
+learning_rate = 0.001
+tolerance = 1e-10
+epochs = 200
+prev_loss = float("inf")
+error_list = [] # list of the errors to see the progression
 
-# PRIMA VMAP E POI GRAD, PERCHE' GRAD RICHIEDE UN OUTPUT CHE E' UN INTERO
-
-# Specification: I used all the data as training set
-# list of the errors to see the progression
-error_list = []
-
-# loading the input file and the output file
+# LOADING THE I/O FILES
 x_raw = np.load("data_x.npy")
 y_raw = np.load("data_y.npy")
 
@@ -21,7 +19,7 @@ x = jnp.array(x_raw)
 y_true = jnp.array(y_raw).flatten() # used to transform the matrix into a 1-dimensional array
 
 # creation of the random weights
-seed = 1701
+
 k1 = rnd.key(seed)
 k2 = rnd.key(seed)
 k3 = rnd.key(seed)
@@ -33,10 +31,10 @@ w2 = rnd.normal(k2,(4,4))
 w3 = rnd.normal(k3,(4,1))
 # output of first layer is a number
 
+# NEURAL NETWORK CREATION
 # I created a 3 layer neural network with 4 neurons in the hidden layers
 def neural_network(x,w1,w2,w3):
     # calculate the output of the first layer
-
     out1 = []
     for y in range(4):
         sum = 0
@@ -51,14 +49,12 @@ def neural_network(x,w1,w2,w3):
             sum = sum + out1[z]*w2[z][y]
         out2.append(jnp.maximum(0,sum))
 
-    # calculate the output of the third layer, it does not have the activation function
-    # it does have only one node
+    # calculate the output of the third layer, it does not have the activation function, it does have only one node
     sum = 0
     for y in range(4):
         sum = sum + out2[y]*w3[y][0]
 
     return sum
-
 
 network_vmap = vmap(neural_network,in_axes=(0,None,None,None))
 # create the least squared loss function over the hole input
@@ -80,10 +76,6 @@ def update_weights(x,y_true,w1,w2,w3):
 
 update_weights_jit = jit(update_weights)
 
-learning_rate = 0.001
-tolerance = 1e-10
-epochs = 200
-prev_loss = float("inf")
 for i in range(epochs):
     error,w1,w2,w3 = update_weights_jit(x,y_true,w1,w2,w3)
     current_loss = error
@@ -91,12 +83,10 @@ for i in range(epochs):
 
     if abs(prev_loss - current_loss) < tolerance:
         break
-
     prev_loss = current_loss
-print(error_list)
 
 
-# Plotting the results
+# PLOTTING RESULTS
 plt.figure(figsize=(10,10))
 plt.plot(error_list)
 plt.grid(True)

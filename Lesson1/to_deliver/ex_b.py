@@ -1,10 +1,6 @@
-from jax import grad,vmap
-from jax import numpy as jnp
+from jax import grad,vmap, numpy as jnp
 import matplotlib.pyplot as plt
-#ATTENTO A NON CONFONDERE NPE JNP
-# ATTENTO, IN PYTHON NON POSSO MODIFICARE IN PLACE GLI ARRAY (VERIFICA)
 
-# Come mai non funziona con numeri interi??
 # Computing the gradient using grad function
 inp = jnp.array([0.5,1,2,3,4])
 
@@ -24,7 +20,7 @@ for i in range(len(inp)):
 
 print(result_delta)
 
-# Plotting the results
+# PLOTTING RESULTS
 fig, ax = plt.subplots(figsize=(10,10))
 
 # different dimensions for the point in order to see them even if they are in the same place
