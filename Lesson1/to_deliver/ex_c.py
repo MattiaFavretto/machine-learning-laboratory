@@ -1,19 +1,21 @@
-from jax import jit, rnd, numpy as jnp
+from jax import jit, random as rnd, numpy as jnp
 
 seed = 1701
-k = rnd.key(seed)
-input = rnd.normal(k, (4, 2))
+k1 = rnd.key(seed)
+k2 = rnd.key(seed)
 
-input = jnp.array([[0.0,1.0],[2.0,3.0],[3.0,4.0],[5.0,-1.0]]) 
+inp = rnd.normal(k1, (10,))
+weight_bias = rnd.normal(k2, (10, 2))
 
-def dense_layer(x):
-    # input: array containing both inputs and weights
+def dense_layer(x,w):
+    # input: array containing input and weight/bias
     sum = 0
     for i in range(len(x)):
-        sum = sum + x[i][0]*x[i][1]
+        sum = sum + x[i]*w[i][1]
+    sum = sum + w[0][0] # adding the bias
     # Applying the ReLU activation function with the max
     return jnp.maximum(0,sum)
 
 dense_layer_jit = jit(dense_layer)
-result = dense_layer_jit(input)
+result = dense_layer_jit(inp, weight_bias)
 print(result)

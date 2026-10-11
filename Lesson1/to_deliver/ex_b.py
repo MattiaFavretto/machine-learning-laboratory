@@ -1,8 +1,10 @@
-from jax import grad,vmap, numpy as jnp
+from jax import grad, vmap, numpy as jnp, random as rnd
 import matplotlib.pyplot as plt
 
 # Computing the gradient using grad function
-inp = jnp.array([0.5,1,2,3,4])
+seed = 1701
+k = rnd.key(seed)
+inp = rnd.normal(k, (10,))
 
 def compute_arctan(x):
     return jnp.arctan(x)
@@ -14,9 +16,9 @@ result_grad = compute_arctan_vmap(inp)
 print(result_grad)
 
 # Computing the gradient using delta
-result_delta = jnp.array([])
+result_delta = []
 for i in range(len(inp)):
-    result_delta = jnp.append(result_delta,1/(1+inp[i]**2))
+    result_delta.append(1/(1+inp[i]**2))
 
 print(result_delta)
 

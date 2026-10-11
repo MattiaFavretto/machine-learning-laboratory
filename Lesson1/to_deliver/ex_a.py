@@ -1,11 +1,11 @@
-from jax import vmap
-from jax import numpy as np
+from jax import vmap, jnp, random as rnd
 
-
-inp = np.array([1,2])
+seed = 1701
+k = rnd.key(seed)
+inp = rnd.normal(k, (10, 1))
 
 def compute_arctan(x):
-    return np.arctan(x)
+    return jnp.arctan(x)
 
 compute_arctan_v = vmap(compute_arctan, in_axes=(0)) # il numero qui indica l'asse sul quale si trova il nostro vettore di input
 
