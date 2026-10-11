@@ -1,15 +1,38 @@
-from jax import grad
-from jax import numpy as np
+from jax import grad,vmap
+from jax import numpy as jnp
+import matplotlib.pyplot as plt
+#ATTENTO A NON CONFONDERE NPE JNP
+# ATTENTO, IN PYTHON NON POSSO MODIFICARE IN PLACE GLI ARRAY (VERIFICA)
 
-
-# Come mai non funziona con numeri interi????
-
-a = 0.5
+# Come mai non funziona con numeri interi??
+# Computing the gradient using grad function
+inp = jnp.array([0.5,1,2,3,4])
 
 def compute_arctan(x):
-    return np.arctan(x)
+    return jnp.arctan(x)
 
 compute_actan_grad = grad(compute_arctan, argnums=(0), allow_int=True)
-result = compute_actan_grad(a)
-print(result)
-print((1/(1+a*a)))
+compute_arctan_vmap = vmap(compute_actan_grad, in_axes=(0))
+
+result_grad = compute_arctan_vmap(inp)
+print(result_grad)
+
+# Computing the gradient using delta
+result_delta = jnp.array([])
+for i in range(len(inp)):
+    result_delta = jnp.append(result_delta,1/(1+inp[i]**2))
+
+print(result_delta)
+
+# Plotting the results
+fig, ax = plt.subplots(figsize=(10,10))
+
+# different dimensions for the point in order to see them even if they are in the same place
+ax.scatter(inp,result_grad,color="red", s=50, label="Grad function")
+ax.scatter(inp,result_delta,color="blue",s=10, label="Delta function")
+
+ax.set_xlabel("X")
+ax.set_ylabel("Gradient")
+ax.grid(True)
+
+plt.show()
