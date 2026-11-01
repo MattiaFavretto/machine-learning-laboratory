@@ -123,7 +123,6 @@ expectation_maximization_jit = jit(expectation_maximization)
 
 def expectation_maximization_fori(x, gauss, responsability):
   N = len(x)
-  num_iterations = 100
 
   # Define a function that receive only two arguments and one output, as fori_loop requires
   def body_fun(i, input):
@@ -154,9 +153,9 @@ execution_time = final_time - starting_time
 
 print("Time for the execution", execution_time)
 # Note: the execution time is way faster, on the first execution and also on the others
+# This because the function is compiled by lax.fori_loop only one time, unless with for and then jit the function is repeated for each iteration, resulting in a higher compilation time
+# Also the small dimension of the code in fori_loop compared to the for makes the execution faster because it is managed in a more efficient way
 
-# PRINT THE RESULTS
-colors = ['red','green']
 plt.figure(figsize=(10, 10))
 # Plot the points
 plt.scatter(x[:, 0], x[:, 1], s=15)

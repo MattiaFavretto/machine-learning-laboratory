@@ -11,7 +11,7 @@ weight_bias = rnd.normal(k2, (11,)) # 10 weights + 1 bias
 def dense_layer(x,w):
     # input: array containing input and weight/bias
     sum = 0
-    for i in range(len(x)-1):
+    for i in range(len(x)):
         sum = sum + x[i]*w[i]
     sum = sum + w[-1] # adding the bias
     # Applying the ReLU activation function with the max
