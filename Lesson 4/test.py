@@ -26,4 +26,12 @@ num_gauss = 42
 # }
 
 # print(gauss["covariance"])
-print(jnp.sum(jnp.ones(num_gauss) / num_gauss,))
+# print(jnp.sum(jnp.ones(num_gauss) / num_gauss,))
+#
+n = 6
+A_step = jnp.eye(n) # creates the identity matrix
+tmp = jnp.eye(n-1) # creates a smaller identity matrix, with the padding and the sum we create the matrix we want
+padding = ((0,1),(1,0))
+tmp = jnp.pad(tmp,pad_width=padding,mode="constant",constant_values=0)
+A_step = A_step + tmp
+print(A_step)

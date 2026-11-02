@@ -55,7 +55,7 @@ def get_phonemes2ipa():
     translation["END"] = ""
     return lambda x: "".join(map(translation.get, x))
 
-# the fuction that retruns the sentences and the transcription
+# the fuction that returns the sentences and the transcription
 def data_iter():
     phonemes, _ = get_phonemes()
     transcriptions = read_csv("/share/datasets/LJSpeech-1.1/transcripts.txt", "|")
@@ -63,4 +63,4 @@ def data_iter():
         sentence = get_sentence(Id)
         if len(sentence) < 200:
             yield (sentence, np.array([phonemes[ph] for ph in trans.split(" ")]))
-            #
+            # returns a function that needs to be called to have the results
