@@ -183,3 +183,7 @@ def main():
     print("Time for the execution", execution_time)
 
     # PRINT THE RESULTS
+    print("Final mean", mean)
+    print("Final covariance", covariance)
+    print("Final A", A)
+    
