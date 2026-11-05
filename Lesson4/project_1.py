@@ -242,7 +242,8 @@ def main():
 
         for i, (sentence, transcription) in enumerate(dl.data_iter()):
             x = jnp.array(sentence)
-            y_index = jnp.array([phoneme2idx[p] for p in transcription], dtype=jnp.int32)
+            # data_iter() returns transcription already converted to phoneme indices!
+            y_index = jnp.array(transcription, dtype=jnp.int32)
 
             if i < 700:
                 train_data.append((x, y_index))
