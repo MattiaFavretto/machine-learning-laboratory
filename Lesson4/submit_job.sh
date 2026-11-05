@@ -14,9 +14,9 @@
 echo "Esecuzione sul nodo: $SLURM_JOB_NODELIST"
 nvidia-smi -L
 
-# Carica l'ambiente Python (micromamba, come da docs del cluster).
-source ~/.init_mamba
-micromamba activate myenv
+# Carica l'ambiente Python (micromamba)
+eval "$(micromamba shell hook --shell bash 2>/dev/null || ~/.local/bin/micromamba shell hook --shell bash 2>/dev/null)"
+micromamba activate mllab || source ~/.bashrc && micromamba activate mllab
 
 # Cartella del codice (dove si trova questo script al momento del submit)
 code_dir="$SLURM_SUBMIT_DIR"
