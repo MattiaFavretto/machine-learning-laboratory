@@ -59,12 +59,12 @@ def step_e(x,y,mean,covariance, A):
         old_beta = carry
         pdf_t, c_t = input
         # I need to repeat this for every k
-        new_beta = logsumexp(A + (pdf_t + old_beta)[None, :], axis=1) - c_t
+        new_beta = logsumexp(A_step + (pdf_t + old_beta)[None, :], axis=1) - c_t
 
         return new_beta, new_beta
 
     def compute_step_csi(c_t,pdf_t,alpha_t,beta_t):
-        csi_n = jnp.exp(alpha_t[:, None] + A + (pdf_t + beta_t)[None, :] - c_t)
+        csi_n = jnp.exp(alpha_t[:, None] + A_step + (pdf_t + beta_t)[None, :] - c_t)
         return csi_n
 
     compute_csi = vmap(compute_step_csi,in_axes=(0,0,0,0))
