@@ -169,12 +169,39 @@ def try_with_generate_chains():
 
     total_ll_array = jnp.zeros(epochs)
     A = jnp.ones((num_gauss,num_gauss))/num_gauss
+    ### START CLAUDE
+    mse_mean = []
+    mse_cov = []
+    mse_A = []
+    ### END CLAUDE
     for i in range(epochs):
             mean, covariance, A, total_ll_array = expectation_maximization(i,mean, covariance, A, total_ll_array, num_gauss, num_features, train)
+            ### START CLAUDE
+            # MSE between the estimated parameters and the true ones used to generate the chains
+            mse_mean.append(float(np.mean((np.array(mean) - data_mean) ** 2)))
+            mse_cov.append(float(np.mean((np.array(covariance) - data_cov) ** 2)))
+            mse_A.append(float(np.mean((np.array(A) - data_A) ** 2)))
+            print(f"Epoch {i+1}: MSE mean={mse_mean[-1]:.5f}, cov={mse_cov[-1]:.5f}, A={mse_A[-1]:.5f}")
+            ### END CLAUDE
 
     print("Final mean", mean, "Initial mean", data_mean)
     print("Final covariance", covariance, "Initial covariance", data_cov)
     print("Final A", A, "Initial A", data_A)
+
+    ### START CLAUDE
+    epochs_axis = np.arange(1, epochs + 1)
+    plt.figure(figsize=(8, 5))
+    plt.plot(epochs_axis, mse_mean, marker="o", label="Mean")
+    plt.plot(epochs_axis, mse_cov, marker="s", label="Covariance")
+    plt.plot(epochs_axis, mse_A, marker="^", label="A")
+    plt.xlabel("Epoch")
+    plt.ylabel("MSE")
+    plt.title("MSE vs true parameters per epoch")
+    plt.yscale("log")
+    plt.grid(True)
+    plt.legend()
+    plt.show()
+    ### END CLAUDE
 
 
 
