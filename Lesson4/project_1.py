@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import data_loader_speech as dl
 import generate_chains as gc
 import numpy as np
+from jax.scipy.special import logsumexp
 
 # input: x are the evidence, y are the hidden states, mean and covariance are the parameters of the gaussians, A is the transition matrix
 @jit
@@ -16,16 +17,15 @@ def step_e(x,y,mean,covariance, A):
 
     # Calculate the multivariate logpdf, the pdf gives 0.0 
     pdf = multivariate_normal.logpdf(x[:,None,:],mean=mean[y][None,:,:],cov=covariance[y][None,:,:,:])
-    max_log_pdf = jnp.max(pdf, axis=1, keepdims=True)
-    pdf = jnp.exp(pdf - max_log_pdf)  # Subtract the max log in order to multiply p(x|y) * exp(-max_log_pdf), this value will mantain the alfa, beta, csi the same because it is a factor that will also appear in c, the denominator of their normalization. 
 
     # Initialize alfa and beta inside the function to deal also with sentences with different length
     pi = jnp.zeros(n).at[0].set(1.0)
-    initial_alpha = pi * pdf[0]
-    c_0 = jnp.sum(initial_alpha)
-    initial_alpha = initial_alpha/c_0
+    pi = jnp.log(pi) # move to log space
+    initial_alpha = pi + pdf[0]
+    c_0 = logsumexp(initial_alpha)
+    initial_alpha -= c_0
 
-    final_beta = jnp.zeros(n).at[-1].set(1.0)
+    final_beta = jnp.full(n, -jnp.inf).at[-1].set(0.0)
 
     # Create the A matrix for this situation A_sub[i, j] = A[p(i), p(j)]
     A_sub = A[y[:, None], y[None, :]]
@@ -33,6 +33,7 @@ def step_e(x,y,mean,covariance, A):
     # maske to only have left-to-right
     mask = jnp.eye(n) + jnp.eye(n, k=1)
     A_step = A_sub * mask   # rows do not sum to 1
+    A_step = jnp.log(A_step) # move to log space
 
     # Calculate the initial alpha and final beta
     # defined inside of the one_step_em function to access gauss and A
@@ -41,9 +42,9 @@ def step_e(x,y,mean,covariance, A):
         old_alpha = carry
 
         # I need to repeat this for every k
-        new_alpha = pdf_t * (old_alpha@A_step)
-        new_c = jnp.sum(new_alpha)
-        new_alpha = new_alpha / new_c
+        new_alpha = pdf_t + logsumexp(old_alpha[:, None] + A, axis=0)
+        new_c = logsumexp(new_alpha)
+        new_alpha -= new_c
 
         return new_alpha, (new_alpha, new_c)
 
@@ -52,13 +53,12 @@ def step_e(x,y,mean,covariance, A):
         old_beta = carry
         pdf_t, c_t = input
         # I need to repeat this for every k
-        new_beta = A_step @ (pdf_t * old_beta)
-        new_beta = new_beta / c_t
+        new_beta = logsumexp(A + (pdf_t + old_beta)[None, :], axis=1) - c_t
 
         return new_beta, new_beta
 
     def compute_step_csi(c_t,pdf_t,alpha_t,beta_t):
-        csi_n = (jnp.outer(alpha_t,pdf_t * beta_t) * A_step )/c_t
+        csi_n = jnp.exp(alpha_t[:, None] + A + (pdf_t + beta_t)[None, :] - c_t)
         return csi_n
 
     compute_csi = vmap(compute_step_csi,in_axes=(0,0,0,0))
@@ -75,7 +75,7 @@ def step_e(x,y,mean,covariance, A):
 
     # Calculate the parameters for our sentence
     # responsability
-    responsability_step = alpha*beta
+    responsability_step = jnp.exp(alpha + beta)
     # transition probability
     csi_step = compute_csi(c[1:],pdf[1:],alpha[:-1],beta[1:])
 
@@ -95,7 +95,7 @@ def step_e(x,y,mean,covariance, A):
     csi_global_sum = csi_global_sum.at[row_idx, col_idx].add(csi_step_sum)
 
     # Calculation of the Log Likelihood
-    ll = jnp.sum(jnp.log(c) + jnp.squeeze(max_log_pdf, axis=1)) # I need to add the max_log_pdf because I subtracted it before to avoid numerical issues
+    ll = jnp.sum(c)
 
     # Return responsability and csi to be summed over every sequence
     return responsability_global, csi_global_sum, ll
