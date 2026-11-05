@@ -14,8 +14,10 @@ def step_e(x,y,mean,covariance, A):
     n = len(y)
     num_gauss = mean.shape[0]
 
-    # Calculate the multivariate normal pdf
-    pdf = multivariate_normal.pdf(x[:,None,:],mean=mean[y][None,:,:],cov=covariance[y][None,:,:,:])
+    # Calculate the multivariate logpdf, the pdf gives 0.0 
+    pdf = multivariate_normal.logpdf(x[:,None,:],mean=mean[y][None,:,:],cov=covariance[y][None,:,:,:])
+    max_log_pdf = jnp.max(pdf, axis=1, keepdims=True)
+    pdf = jnp.exp(pdf - max_log_pdf)  # Subtract the max log in order to multiply p(x|y) * exp(-max_log_pdf), this value will mantain the alfa, beta, csi the same because it is a factor that will also appear in c, the denominator of their normalization. 
 
     # Initialize alfa and beta inside the function to deal also with sentences with different length
     pi = jnp.zeros(n).at[0].set(1.0)
@@ -93,7 +95,7 @@ def step_e(x,y,mean,covariance, A):
     csi_global_sum = csi_global_sum.at[row_idx, col_idx].add(csi_step_sum)
 
     # Calculation of the Log Likelihood
-    ll = jnp.sum(jnp.log(c))
+    ll = jnp.sum(jnp.log(c) + jnp.squeeze(max_log_pdf, axis=1)) # I need to add the max_log_pdf because I subtracted it before to avoid numerical issues
 
     # Return responsability and csi to be summed over every sequence
     return responsability_global, csi_global_sum, ll
