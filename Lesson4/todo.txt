@@ -1,0 +1,7 @@
+# Punto c)
+
+restituire array LL (in un file?)
+restituire A, media e covarianza, così mi tengo salvati i valori che ho ottenuto dal training 
+
+# Punto d) 
+come lo posso fare?

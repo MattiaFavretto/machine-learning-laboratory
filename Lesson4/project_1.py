@@ -2,6 +2,10 @@ from jax import numpy as jnp, random as rnd, vmap, jit, lax
 from jax.scipy.stats import multivariate_normal
 import pandas as pd
 import timeit
+### START CLAUDE
+import os
+import traceback
+### END CLAUDE
 import matplotlib.pyplot as plt
 import data_loader_speech as dl
 import generate_chains as gc
@@ -9,6 +13,12 @@ import numpy as np
 from jax.scipy.special import logsumexp
 
 # TODO - UNDERSTAND NEW LOGPDF VARIANT
+
+### START CLAUDE
+# Where results are written (set RESULTS_DIR in the job script, e.g. /share/$USER/project1)
+RESULTS_DIR = os.environ.get("RESULTS_DIR", ".")
+os.makedirs(RESULTS_DIR, exist_ok=True)
+### END CLAUDE
 
 
 
@@ -218,7 +228,7 @@ def try_with_generate_chains():
 def main():
 
     # Test for point b) of the project
-    try_with_generate_chains()
+    # try_with_generate_chains()
 
     try:
         # Load phonemes list
@@ -274,8 +284,18 @@ def main():
         print("Final covariance", covariance)
         print("Final A", A)
 
+        ### START CLAUDE
+        # Save the trained parameters and the LL per epoch (plot it later, locally, from trained_params.npz)
+        np.savez(os.path.join(RESULTS_DIR, "trained_params.npz"),
+                 mean=np.array(mean), covariance=np.array(covariance), A=np.array(A),
+                 ll=np.array(total_ll_array))
+        ### END CLAUDE
+
     except Exception as e:
         print("An error occured", e)
+        ### START CLAUDE
+        traceback.print_exc()  # show where the error happened instead of hiding it
+        ### END CLAUDE
 
 
 if __name__ == "__main__":
