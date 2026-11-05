@@ -4,6 +4,8 @@ import pandas as pd
 import timeit
 import matplotlib.pyplot as plt
 import data_loader_speech as dl
+import generate_chains as gc
+import numpy as np
 
 # input: x are the evidence, y are the hidden states, mean and covariance are the parameters of the gaussians, A is the transition matrix
 @jit
@@ -98,6 +100,15 @@ def step_e(x,y,mean,covariance, A):
 # END FUNCTION STEP_E
 
 @jit
+def update_stats(x, y, mean, covariance, A, Nk, Sx, Sxx, csi_sum, total_ll):
+    responsability, csi, ll = step_e(x, y, mean, covariance, A)
+    Nk += jnp.sum(responsability, axis=0)
+    Sx += jnp.einsum('tk,td->kd', responsability, x)
+    Sxx += jnp.einsum('tk,td,te->kde', responsability, x, x)
+    csi_sum += csi
+    total_ll += ll
+    return Nk, Sx, Sxx, csi_sum, total_ll
+
 def expectation_maximization(i, mean, covariance, A, total_ll_array, num_gauss, num_features, train_data):
 
     csi_sum = jnp.zeros((num_gauss, num_gauss))
@@ -107,16 +118,6 @@ def expectation_maximization(i, mean, covariance, A, total_ll_array, num_gauss, 
     Sxx = jnp.zeros((num_gauss, num_features, num_features))
     total_ll = 0.0
     
-    @jit
-    def update_stats(x, y, mean, covariance, A, Nk, Sx, Sxx, csi_sum, total_ll):
-        responsability, csi, ll = step_e(x, y, mean, covariance, A)
-        Nk += jnp.sum(responsability, axis=0)
-        Sx += jnp.einsum('tk,td->kd', responsability, x)
-        Sxx += jnp.einsum('tk,td,te->kde', responsability, x, x)
-        csi_sum += csi
-        total_ll += ll
-        return Nk, Sx, Sxx, csi_sum, total_ll
-
     for (x,y) in train_data:
         Nk, Sx, Sxx, csi_sum, total_ll = update_stats(x, y, mean, covariance, A, Nk, Sx, Sxx, csi_sum, total_ll)
         
@@ -133,57 +134,110 @@ def expectation_maximization(i, mean, covariance, A, total_ll_array, num_gauss, 
     total_ll_array = total_ll_array.at[i].set(total_ll)
     return mean, covariance, A, total_ll_array
 
-def main():
-    # Load phonemes list 
-    _, phonemes_list = dl.get_phonemes()
-    phoneme2idx = {p: i for i, p in enumerate(phonemes_list)} # I convert phonems to index because I need that to use the evidence in the e_step
-    num_gauss = len(phonemes_list) # there is a gaussian for every phoneme
 
-    # 2. Upload the sentences and transcriptions and split them into training and test set, translating the phonemes into indexes
-    train_data = []
-    test_data = []
-
-    for i, (sentence, transcription) in enumerate(dl.data_iter()):
-        x = jnp.array(sentence)
-        y_index = jnp.array([phoneme2idx[p] for p in transcription], dtype=jnp.int32)
-    
-        if i < 700:
-            train_data.append((x, y_index))
-        else:
-            test_data.append((x, y_index))
-
-    num_features = train_data[0][0].shape[1] # the number of features is the dimension of the input
-    # parameters of the gaussians
-
-    # create random values for the two gaussian
-    seed = 1701
-    k1 = rnd.key(seed) # unless they will have the same value
-
-    # Computer the initial mean and covariance for the gaussians, using all the sentences in the training set.
-    all_train_frames = jnp.vstack([x for x, _ in train_data])
-    total_frames = all_train_frames.shape[0]
-    idx = rnd.choice(k1, total_frames, shape=(num_gauss,), replace=True)
-    mean = all_train_frames[idx] 
-
-    covariance = jnp.tile(jnp.cov(all_train_frames, rowvar=False)[None,:,:],(num_gauss,1,1)) # used to repeat the covariance for every gaussian. 
-
+def try_with_generate_chains():
+    num_gauss = 4
+    num_features = 3
     epochs = 10
-    A = jnp.ones((num_gauss,num_gauss))/num_gauss
+    num_frames = 50
+    frame_length = 30
 
-    # Call the function again
-    starting_time = timeit.default_timer()
+    # Generate random parameters for the gaussians
+    data_mean = np.random.normal(size=(num_gauss, num_features))
+
+    sqrt_cov = np.random.normal(size=(num_gauss, num_features, num_features))
+    data_cov = sqrt_cov.transpose((0, 2, 1)) @ sqrt_cov
+
+    data_A = np.random.uniform(0.1, 1.0, size=(num_gauss, num_gauss)) + np.eye(num_gauss) * 2.0
+    data_A = data_A / np.sum(data_A, axis=1, keepdims=True)
+
+    # Generate chains based on the random parameters
+    chains = gc.generate_chains(states=num_gauss, amount=num_frames, length=frame_length, d=num_features, μ=data_mean,
+    Σ=data_cov, transition_probs=data_A) # generate 50 chains of length 30 with 4 states and 3 features
+
+    train = [(jnp.array(c[1]), jnp.array(c[2], dtype=jnp.int32)) for c in chains]
+
+    # Initialize parameters for the EM algorithm
+    seed = 1701
+    k1 = rnd.key(seed) 
+    
+    all_frames = jnp.vstack([x for x, _ in train])
+    idx = rnd.choice(k1, all_frames.shape[0], shape=(num_gauss,), replace=False)
+    mean = all_frames[idx] 
+    covariance = jnp.tile(jnp.cov(all_frames, rowvar=False)[None,:,:],(num_gauss,1,1)) # used to repeat the covariance for every gaussian. 
+
     total_ll_array = jnp.zeros(epochs)
-
+    A = jnp.ones((num_gauss,num_gauss))/num_gauss
     for i in range(epochs):
-        mean, covariance, A, total_ll_array = expectation_maximization(i,mean, covariance, A, total_ll_array, num_gauss, num_features, train_data)
-    mean.block_until_ready()
-    final_time = timeit.default_timer()
-    execution_time = final_time - starting_time
-    
-    print("Time for the execution", execution_time)
+            mean, covariance, A, total_ll_array = expectation_maximization(i,mean, covariance, A, total_ll_array, num_gauss, num_features, train)
 
-    # PRINT THE RESULTS
-    print("Final mean", mean)
-    print("Final covariance", covariance)
-    print("Final A", A)
+    print("Final mean", mean, "Initial mean", data_mean)
+    print("Final covariance", covariance, "Initial covariance", data_cov)
+    print("Final A", A, "Initial A", data_A)
+
     
+
+def main():
+
+    # Test for point b) of the project
+    try_with_generate_chains()
+
+    try:
+        # Load phonemes list 
+        _, phonemes_list = dl.get_phonemes()
+        phoneme2idx = {p: i for i, p in enumerate(phonemes_list)} # I convert phonems to index because I need that to use the evidence in the e_step
+        num_gauss = len(phonemes_list) # there is a gaussian for every phoneme
+
+        # 2. Upload the sentences and transcriptions and split them into training and test set, translating the phonemes into indexes
+        train_data = []
+        test_data = []
+
+        for i, (sentence, transcription) in enumerate(dl.data_iter()):
+            x = jnp.array(sentence)
+            y_index = jnp.array([phoneme2idx[p] for p in transcription], dtype=jnp.int32)
+        
+            if i < 700:
+                train_data.append((x, y_index))
+            else:
+                test_data.append((x, y_index))
+
+        num_features = train_data[0][0].shape[1] # the number of features is the dimension of the input
+        # parameters of the gaussians
+
+        # create random values for the two gaussian
+        seed = 1701
+        k1 = rnd.key(seed) # unless they will have the same value
+
+        # Computer the initial mean and covariance for the gaussians, using all the sentences in the training set.
+        all_train_frames = jnp.vstack([x for x, _ in train_data])
+        num_frames = all_train_frames.shape[0]
+        idx = rnd.choice(k1, num_frames, shape=(num_gauss,), replace=True)
+        mean = all_train_frames[idx] 
+
+        covariance = jnp.tile(jnp.cov(all_train_frames, rowvar=False)[None,:,:],(num_gauss,1,1)) # used to repeat the covariance for every gaussian. 
+
+        epochs = 10
+        A = jnp.ones((num_gauss,num_gauss))/num_gauss
+
+        # Call the function again
+        starting_time = timeit.default_timer()
+        total_ll_array = jnp.zeros(epochs)
+
+        for i in range(epochs):
+            mean, covariance, A, total_ll_array = expectation_maximization(i,mean, covariance, A, total_ll_array, num_gauss, num_features, train_data)
+        mean.block_until_ready()
+        final_time = timeit.default_timer()
+        execution_time = final_time - starting_time
+        
+        print("Time for the execution", execution_time)
+
+        # PRINT THE RESULTS
+        print("Final mean", mean)
+        print("Final covariance", covariance)
+        print("Final A", A)
+
+    except Exception as e:
+        print("An error occured", e)
+
+    
+
