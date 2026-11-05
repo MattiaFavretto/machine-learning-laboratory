@@ -13,8 +13,8 @@ def step_e(x,y,mean,covariance, A):
     # Get di length (n) of the sentence and map the indeces of sentence phonemes considering the global list of phonems
     n = len(y)
     num_gauss = mean.shape[0]
-    
-    # Calculate the multivariate normal pdf 
+
+    # Calculate the multivariate normal pdf
     pdf = multivariate_normal.pdf(x[:,None,:],mean=mean[y][None,:,:],cov=covariance[y][None,:,:,:])
 
     # Initialize alfa and beta inside the function to deal also with sentences with different length
@@ -92,7 +92,7 @@ def step_e(x,y,mean,covariance, A):
     csi_global_sum = jnp.zeros((num_gauss, num_gauss))
     csi_global_sum = csi_global_sum.at[row_idx, col_idx].add(csi_step_sum)
 
-    # Calculation of the Log Likelihood 
+    # Calculation of the Log Likelihood
     ll = jnp.sum(jnp.log(c))
 
     # Return responsability and csi to be summed over every sequence
@@ -113,14 +113,14 @@ def expectation_maximization(i, mean, covariance, A, total_ll_array, num_gauss, 
 
     csi_sum = jnp.zeros((num_gauss, num_gauss))
     # If I want to compute the covariance I would need to compute first the new mean and then compute the covariance.
-    Nk = jnp.zeros((num_gauss))
+    Nk = jnp.zeros((num_gauss,))
     Sx = jnp.zeros((num_gauss, num_features))
     Sxx = jnp.zeros((num_gauss, num_features, num_features))
     total_ll = 0.0
-    
+
     for (x,y) in train_data:
         Nk, Sx, Sxx, csi_sum, total_ll = update_stats(x, y, mean, covariance, A, Nk, Sx, Sxx, csi_sum, total_ll)
-        
+
     # Recalculate the gaussian distributions
     # 1. Recalculate the mean
     mean = Sx/Nk[:, None]
@@ -129,13 +129,14 @@ def expectation_maximization(i, mean, covariance, A, total_ll_array, num_gauss, 
     # Recalculate the A matrix
     A = csi_sum/jnp.sum(csi_sum,1)[:,None] # rows must sum to 1
 
-    # covariance += 1e-5 * jnp.eye(num_features)[None, :, :] DA PROVARE A VEDERE CHE EFFETTO HA 
+    # covariance += 1e-5 * jnp.eye(num_features)[None, :, :] DA PROVARE A VEDERE CHE EFFETTO HA
 
     total_ll_array = total_ll_array.at[i].set(total_ll)
     return mean, covariance, A, total_ll_array
 
 
 def try_with_generate_chains():
+    print("Generate chains started")
     num_gauss = 4
     num_features = 3
     epochs = 10
@@ -159,12 +160,12 @@ def try_with_generate_chains():
 
     # Initialize parameters for the EM algorithm
     seed = 1701
-    k1 = rnd.key(seed) 
-    
+    k1 = rnd.key(seed)
+
     all_frames = jnp.vstack([x for x, _ in train])
     idx = rnd.choice(k1, all_frames.shape[0], shape=(num_gauss,), replace=False)
-    mean = all_frames[idx] 
-    covariance = jnp.tile(jnp.cov(all_frames, rowvar=False)[None,:,:],(num_gauss,1,1)) # used to repeat the covariance for every gaussian. 
+    mean = all_frames[idx]
+    covariance = jnp.tile(jnp.cov(all_frames, rowvar=False)[None,:,:],(num_gauss,1,1)) # used to repeat the covariance for every gaussian.
 
     total_ll_array = jnp.zeros(epochs)
     A = jnp.ones((num_gauss,num_gauss))/num_gauss
@@ -175,7 +176,7 @@ def try_with_generate_chains():
     print("Final covariance", covariance, "Initial covariance", data_cov)
     print("Final A", A, "Initial A", data_A)
 
-    
+
 
 def main():
 
@@ -183,7 +184,7 @@ def main():
     try_with_generate_chains()
 
     try:
-        # Load phonemes list 
+        # Load phonemes list
         _, phonemes_list = dl.get_phonemes()
         phoneme2idx = {p: i for i, p in enumerate(phonemes_list)} # I convert phonems to index because I need that to use the evidence in the e_step
         num_gauss = len(phonemes_list) # there is a gaussian for every phoneme
@@ -195,7 +196,7 @@ def main():
         for i, (sentence, transcription) in enumerate(dl.data_iter()):
             x = jnp.array(sentence)
             y_index = jnp.array([phoneme2idx[p] for p in transcription], dtype=jnp.int32)
-        
+
             if i < 700:
                 train_data.append((x, y_index))
             else:
@@ -212,9 +213,9 @@ def main():
         all_train_frames = jnp.vstack([x for x, _ in train_data])
         num_frames = all_train_frames.shape[0]
         idx = rnd.choice(k1, num_frames, shape=(num_gauss,), replace=True)
-        mean = all_train_frames[idx] 
+        mean = all_train_frames[idx]
 
-        covariance = jnp.tile(jnp.cov(all_train_frames, rowvar=False)[None,:,:],(num_gauss,1,1)) # used to repeat the covariance for every gaussian. 
+        covariance = jnp.tile(jnp.cov(all_train_frames, rowvar=False)[None,:,:],(num_gauss,1,1)) # used to repeat the covariance for every gaussian.
 
         epochs = 10
         A = jnp.ones((num_gauss,num_gauss))/num_gauss
@@ -228,7 +229,7 @@ def main():
         mean.block_until_ready()
         final_time = timeit.default_timer()
         execution_time = final_time - starting_time
-        
+
         print("Time for the execution", execution_time)
 
         # PRINT THE RESULTS
@@ -238,6 +239,3 @@ def main():
 
     except Exception as e:
         print("An error occured", e)
-
-    
-
