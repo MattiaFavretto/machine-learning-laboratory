@@ -23,7 +23,9 @@ os.makedirs(RESULTS_DIR, exist_ok=True)
 
 
 # input: x are the evidence, y are the hidden states, mean and covariance are the parameters of the gaussians, A is the transition matrix
-@jit
+# NOTA: Non usiamo @jit a livello di step_e/update_stats perche x e y cambiano shape per ciascuna
+# delle 700 frasi. JAX ricompilerebbbe il kernel 700 volte da zero (15+ minuti di compilazione).
+# Le operazioni interne (einsum, lax.scan, vmap) girano comunque native su GPU.
 def step_e(x,y,mean,covariance, A):
     # Get di length (n) of the sentence and map the indeces of sentence phonemes considering the global list of phonems
     n = len(y)
@@ -117,7 +119,6 @@ def step_e(x,y,mean,covariance, A):
     return responsability_global, csi_global_sum, ll
 # END FUNCTION STEP_E
 
-@jit
 def update_stats(x, y, mean, covariance, A, Nk, Sx, Sxx, csi_sum, total_ll):
     responsability, csi, ll = step_e(x, y, mean, covariance, A)
     Nk += jnp.sum(responsability, axis=0)
@@ -272,13 +273,20 @@ def main():
         starting_time = timeit.default_timer()
         total_ll_array = jnp.zeros(epochs)
 
+        print(f"Starting training ({epochs} epochs on {len(train_data)} sentences)...", flush=True)
         for i in range(epochs):
+            epoch_start = timeit.default_timer()
             mean, covariance, A, total_ll_array = expectation_maximization(i,mean, covariance, A, total_ll_array, num_gauss, num_features, train_data)
-        mean.block_until_ready()
+            # Forza il completamento asincrono su GPU per misurare il tempo reale
+            mean.block_until_ready()
+            epoch_time = timeit.default_timer() - epoch_start
+            elapsed_total = timeit.default_timer() - starting_time
+            print(f"Epoch {i+1}/{epochs} completed in {epoch_time:.2f}s (elapsed: {elapsed_total:.2f}s, LL: {float(total_ll_array[i]):.2f})", flush=True)
+
         final_time = timeit.default_timer()
         execution_time = final_time - starting_time
 
-        print("Time for the execution", execution_time)
+        print("Time for the execution:", execution_time, flush=True)
 
         # PRINT THE RESULTS
         print("Final mean", mean)

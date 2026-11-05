@@ -42,9 +42,10 @@ cd "${work_dir}"
 
 # Permette a Python di trovare data_loader_speech.py e generate_chains.py
 export PYTHONPATH="${code_dir}:${PYTHONPATH}"
+export PYTHONUNBUFFERED=1
 
 # Esecuzione dello script Python 
-python "${code_dir}/project_1.py"
+python -u "${code_dir}/project_1.py"
 
 # Se è stata usata la scratch temporanea locale, copia su /share e ripulisci
 if [ "$USE_SCRATCH" -eq 1 ]; then
