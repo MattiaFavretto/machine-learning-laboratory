@@ -68,10 +68,8 @@ def step_e_padded(pdf_full, y_pad, T_len, n_len, A):
     pi = jnp.where(n_idx == 0, 0.0, -jnp.inf)
     initial_alpha = pi + pdf[0]
     c_0 = logsumexp(initial_alpha)
-    initial_alpha = initial_alpha - c_0
-
-    # Final beta is 0.0 (log(1)) at the last true phoneme index (n_len - 1), -inf elsewhere
-    final_beta = jnp.where(n_idx == (n_len - 1), 0.0, -jnp.inf)
+    c_0_safe = jnp.where(jnp.isfinite(c_0), c_0, 0.0)
+    initial_alpha = initial_alpha - c_0_safe
 
     # Left-to-right transition matrix for the sentence states
     A_sub = A[y_pad[:, None], y_pad[None, :]]
@@ -83,16 +81,24 @@ def step_e_padded(pdf_full, y_pad, T_len, n_len, A):
         pdf_t, t_idx = inp
         new_alpha = pdf_t + logsumexp(old_alpha[:, None] + A_step, axis=0)
         new_c = logsumexp(new_alpha)
-        new_alpha = new_alpha - new_c
+        new_c_safe = jnp.where(jnp.isfinite(new_c), new_c, 0.0)
+        new_alpha = new_alpha - new_c_safe
         is_valid_t = t_idx < T_len
         alpha_out = jnp.where(is_valid_t, new_alpha, old_alpha)
-        c_out = jnp.where(is_valid_t, new_c, 0.0)
+        c_out = jnp.where(is_valid_t, new_c_safe, 0.0)
         return alpha_out, (alpha_out, c_out)
 
     t_indices = jnp.arange(1, max_T)
     _, (alpha_rest, c_rest) = lax.scan(forward_step, initial_alpha, (pdf[1:], t_indices))
     alpha = jnp.vstack([initial_alpha[None, :], alpha_rest])
-    c = jnp.concatenate([jnp.array([c_0]), c_rest])
+    c = jnp.concatenate([jnp.array([c_0_safe]), c_rest])
+
+    # Poiché la catena è vincolata a terminare nell'ultimo stato (n_len - 1),
+    # impostiamo final_beta[n_len - 1] = -alpha[T_len - 1, n_len - 1] così che
+    # sum_j gamma_t(j) = 1.0 e sum_{i,j} csi_t(i,j) = 1.0 (vere PMF) senza underflow!
+    last_alpha_end = alpha[-1, n_len - 1]
+    last_alpha_safe = jnp.where(jnp.isfinite(last_alpha_end), last_alpha_end, 0.0)
+    final_beta = jnp.where(n_idx == (n_len - 1), -last_alpha_safe, -jnp.inf)
 
     def backward_step(old_beta, inp):
         pdf_t, c_t, t_idx = inp
@@ -117,7 +123,7 @@ def step_e_padded(pdf_full, y_pad, T_len, n_len, A):
 
     responsability_global = jnp.zeros((max_T, num_gauss)).at[:, y_pad].add(responsability_step)
     csi_global_sum = jnp.zeros((num_gauss, num_gauss)).at[y_pad[:, None], y_pad[None, :]].add(csi_step_sum)
-    ll = jnp.sum(c)
+    ll = jnp.sum(c) + last_alpha_safe
     return responsability_global, csi_global_sum, ll
 
 
@@ -128,20 +134,34 @@ def em_epoch_padded(i, mean, covariance, A, total_ll_array, X_pad, Y_pad, T_lens
     all_pdfs = compute_all_logpdf(X_pad, mean, covariance)
     resps, csis, lls = vmap(step_e_padded, in_axes=(0, 0, 0, 0, None))(all_pdfs, Y_pad, T_lens, n_lens, A)
 
-    Nk = jnp.full((num_gauss,), 1e-8) + jnp.sum(resps, axis=(0, 1))
+    # Ignora eventuali frasi patologiche in cui la sequenza finale non è raggiungibile (es. T_len < n_len)
+    valid_sent = jnp.isfinite(lls) & (~jnp.isnan(resps).any(axis=(1, 2))) & (~jnp.isnan(csis).any(axis=(1, 2)))
+    resps = jnp.where(valid_sent[:, None, None], resps, 0.0)
+    csis = jnp.where(valid_sent[:, None, None], csis, 0.0)
+    lls = jnp.where(valid_sent, lls, 0.0)
+
+    Nk_raw = jnp.sum(resps, axis=(0, 1))
+    Nk = jnp.maximum(Nk_raw, 1e-8)
     Sx = jnp.einsum('ntk,ntd->kd', resps, X_pad)
-    Sxx = jnp.einsum('ntk,ntd,nte->kde', resps, X_pad, X_pad)
+    # Se un fonema non compare mai nel training set (es. START/END), mantieni la media precedente
+    new_mean = jnp.where((Nk_raw > 1e-3)[:, None], Sx / Nk[:, None], mean)
+
+    # Formula centrata E[(x - mu)(x - mu)^T]: garantisce semidefinitezza positiva senza cancellazione numerica in float32
+    diff = X_pad[:, :, None, :] - new_mean[None, None, :, :]
+    new_cov = jnp.einsum('ntk,ntkd,ntke->kde', resps, diff, diff) / Nk[:, None, None]
+    new_cov = jnp.where((Nk_raw > 1e-3)[:, None, None], new_cov, covariance)
+    new_cov = new_cov + 1e-3 * jnp.eye(num_features)[None, :, :]
+
     csi_sum = jnp.sum(csis, axis=0)
+    row_sum = jnp.sum(csi_sum, axis=1, keepdims=True)
+    # Se un fonema non ha transizioni uscenti (row_sum == 0), evita 0/0 = NaN mantenendo una riga uniforme
+    new_A = jnp.where(row_sum > 1e-8, csi_sum / jnp.maximum(row_sum, 1e-8), jnp.ones_like(A) / num_gauss)
+    new_A = new_A + 1e-8 * jnp.eye(num_gauss)
+    new_A = new_A / jnp.sum(new_A, axis=1, keepdims=True)
+
     total_ll = jnp.sum(lls)
-
-    mean = Sx / Nk[:, None]
-    covariance = Sxx / Nk[:, None, None] - jnp.einsum('kd,ke->kde', mean, mean)
-    covariance += 1e-5 * jnp.eye(num_features)[None, :, :]
-    A = csi_sum / jnp.sum(csi_sum, axis=1, keepdims=True)
-    A += 1e-8 * jnp.eye(num_gauss)
-
     total_ll_array = total_ll_array.at[i].set(total_ll)
-    return mean, covariance, A, total_ll_array
+    return new_mean, new_cov, new_A, total_ll_array
 ### END CLAUDE
 
 
@@ -208,6 +228,10 @@ def step_e(x,y,mean,covariance, A):
     alpha = jnp.vstack([initial_alpha[None, :], alpha])
     c = jnp.concatenate([jnp.array([c_0]),c])
 
+    # Poiche la catena termina nello stato n-1, final_beta[-1] = -alpha[-1, -1]
+    # rende gamma e csi delle vere PMF (somma = 1 a ogni istante t) ed evita l'underflow!
+    final_beta = jnp.full(n, -jnp.inf).at[-1].set(-alpha[-1, -1])
+
     # Calculate the backward step
     _,beta = lax.scan(backaward_step,final_beta,(pdf[1:],c[1:]),reverse=True) # it is [1:] because the reverse starts form the last element
     beta = jnp.vstack([beta, final_beta[None, :]])
@@ -234,7 +258,7 @@ def step_e(x,y,mean,covariance, A):
     csi_global_sum = csi_global_sum.at[row_idx, col_idx].add(csi_step_sum)
 
     # Calculation of the Log Likelihood
-    ll = jnp.sum(c)
+    ll = jnp.sum(c) + alpha[-1, -1]
 
     # Return responsability and csi to be summed over every sequence
     return responsability_global, csi_global_sum, ll
