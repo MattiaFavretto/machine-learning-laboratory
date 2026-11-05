@@ -48,7 +48,7 @@ def step_e(x,y,mean,covariance, A):
         old_alpha = carry
 
         # I need to repeat this for every k
-        new_alpha = pdf_t + logsumexp(old_alpha[:, None] + A, axis=0)
+        new_alpha = pdf_t + logsumexp(old_alpha[:, None] + A_step, axis=0)
         new_c = logsumexp(new_alpha)
         new_alpha -= new_c
 
