@@ -20,7 +20,9 @@ def step_e(x,y,mean,covariance, A):
     num_gauss = mean.shape[0]
 
     # Calculate the multivariate logpdf, the pdf gives 0.0 
-    pdf = multivariate_normal.logpdf(x[:,None,:],mean=mean[y][None,:,:],cov=covariance[y][None,:,:,:])
+    A_sub = A[y[:, None], y[None, :]]
+    mask = (jnp.eye(n) + jnp.eye(n, k=1)) > 0
+    A_step = jnp.where(mask, jnp.log(A_sub), -jnp.inf)
 
     # Initialize alfa and beta inside the function to deal also with sentences with different length
     pi = jnp.zeros(n).at[0].set(1.0)
