@@ -122,6 +122,7 @@ def expectation_maximization(i, mean, covariance, A, total_ll_array, num_gauss, 
     csi_sum = jnp.zeros((num_gauss, num_gauss))
     # If I want to compute the covariance I would need to compute first the new mean and then compute the covariance.
     Nk = jnp.zeros((num_gauss,))
+    Nk += 1e-8 # add a small value to avoid division by zero
     Sx = jnp.zeros((num_gauss, num_features))
     Sxx = jnp.zeros((num_gauss, num_features, num_features))
     total_ll = 0.0
@@ -134,10 +135,11 @@ def expectation_maximization(i, mean, covariance, A, total_ll_array, num_gauss, 
     mean = Sx/Nk[:, None]
     # 2. Recalculate the covariance
     covariance = Sxx/Nk[:, None, None] - jnp.einsum('kd,ke->kde', mean, mean)
+    covariance += 1e-5 * jnp.eye(num_features)[None, :, :] 
     # Recalculate the A matrix
     A = csi_sum/jnp.sum(csi_sum,1)[:,None] # rows must sum to 1
+    A += 1e-8 * jnp.eye(num_gauss) # add a small value to the diagonal to avoid zero probabilities
 
-    # covariance += 1e-5 * jnp.eye(num_features)[None, :, :] DA PROVARE A VEDERE CHE EFFETTO HA
 
     total_ll_array = total_ll_array.at[i].set(total_ll)
     return mean, covariance, A, total_ll_array
