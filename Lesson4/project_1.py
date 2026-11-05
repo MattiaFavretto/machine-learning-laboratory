@@ -413,7 +413,7 @@ def main():
 
         covariance = jnp.tile(jnp.cov(all_train_frames, rowvar=False)[None,:,:],(num_gauss,1,1)) # used to repeat the covariance for every gaussian.
 
-        epochs = 10
+        epochs = 30
         A = jnp.ones((num_gauss,num_gauss))/num_gauss
 
         # Padding di tutte le 700 frasi a (max_T, num_features) e (max_n,) per compilare step_e con @jit una sola volta!
