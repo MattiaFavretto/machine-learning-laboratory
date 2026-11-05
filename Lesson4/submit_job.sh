@@ -21,24 +21,24 @@ micromamba activate mllab || source ~/.bashrc && micromamba activate mllab
 # Cartella del codice (dove si trova questo script al momento del submit)
 code_dir="$SLURM_SUBMIT_DIR"
 
-# Cartella di lavoro temporanea e cartella persistente per i risultati
-# Usa /scratch se disponibile e scrivibile; se siamo su un nodo virtuale (es. i-*) usa /tmp come fallback
+# Cartella persistente su /share (sempre montata e scrivibile su tutti i nodi)
+final_dir="/share/${USER}/project1"
+mkdir -p "${final_dir}"
+
+# Prova a usare /scratch locale se disponibile e scrivibile; altrimenti scrivi direttamente su /share
 if [ -d "/scratch" ] && [ -w "/scratch" ]; then
-    scratch_dir="/scratch/${USER}_${SLURM_JOB_ID}"
+    work_dir="/scratch/${USER}_${SLURM_JOB_ID}"
+    mkdir -p "${work_dir}"
+    chmod 700 "${work_dir}"
+    export RESULTS_DIR="${work_dir}"
+    USE_SCRATCH=1
 else
-    scratch_dir="/tmp/${USER}_${SLURM_JOB_ID}"
+    work_dir="${final_dir}"
+    export RESULTS_DIR="${final_dir}"
+    USE_SCRATCH=0
 fi
 
-mkdir -p "${scratch_dir}"
-chmod 700 "${scratch_dir}"
-
-export FINAL_RESULTS_DIR="/share/${USER}/project1"
-mkdir -p "${FINAL_RESULTS_DIR}"
-
-# Durante il job scrivi su scratch/tmp per non saturare la rete/I/O del cluster
-export RESULTS_DIR="${scratch_dir}"
-
-cd "${scratch_dir}"
+cd "${work_dir}"
 
 # Permette a Python di trovare data_loader_speech.py e generate_chains.py
 export PYTHONPATH="${code_dir}:${PYTHONPATH}"
@@ -46,9 +46,10 @@ export PYTHONPATH="${code_dir}:${PYTHONPATH}"
 # Esecuzione dello script Python 
 python "${code_dir}/project_1.py"
 
-# Copia dei risultati dalla scratch alla cartella persistente su /share
-cp -r ${scratch_dir}/* "${FINAL_RESULTS_DIR}/" 2>/dev/null
-echo "Risultati salvati in ${FINAL_RESULTS_DIR}"
+# Se è stata usata la scratch temporanea locale, copia su /share e ripulisci
+if [ "$USE_SCRATCH" -eq 1 ]; then
+    cp -r "${work_dir}"/* "${final_dir}/" 2>/dev/null
+    rm -rf "${work_dir}"
+fi
 
-# Pulizia della cartella scratch temporanea come da cluster etiquette
-rm -rf "${scratch_dir}"
+echo "Risultati salvati in ${final_dir}"
