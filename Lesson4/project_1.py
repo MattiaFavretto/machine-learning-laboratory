@@ -8,6 +8,10 @@ import generate_chains as gc
 import numpy as np
 from jax.scipy.special import logsumexp
 
+# TODO - UNDERSTAND NEW LOGPDF VARIANT
+
+
+
 # input: x are the evidence, y are the hidden states, mean and covariance are the parameters of the gaussians, A is the transition matrix
 @jit
 def step_e(x,y,mean,covariance, A):
