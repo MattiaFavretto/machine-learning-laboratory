@@ -22,19 +22,23 @@ micromamba activate mllab || source ~/.bashrc && micromamba activate mllab
 code_dir="$SLURM_SUBMIT_DIR"
 
 # Cartella di lavoro temporanea e cartella persistente per i risultati
-scratch_dir="/scratch/${USER}_${SLURM_JOB_ID}"
-if [ ! -d "${scratch_dir}" ]; then
-    mkdir ${scratch_dir}
-    chmod 700 ${scratch_dir}
+# Usa /scratch se disponibile e scrivibile; se siamo su un nodo virtuale (es. i-*) usa /tmp come fallback
+if [ -d "/scratch" ] && [ -w "/scratch" ]; then
+    scratch_dir="/scratch/${USER}_${SLURM_JOB_ID}"
+else
+    scratch_dir="/tmp/${USER}_${SLURM_JOB_ID}"
 fi
+
+mkdir -p "${scratch_dir}"
+chmod 700 "${scratch_dir}"
 
 export FINAL_RESULTS_DIR="/share/${USER}/project1"
 mkdir -p "${FINAL_RESULTS_DIR}"
 
-# Durante il job scrivi su scratch per non saturare la rete/I/O del cluster
+# Durante il job scrivi su scratch/tmp per non saturare la rete/I/O del cluster
 export RESULTS_DIR="${scratch_dir}"
 
-cd ${scratch_dir}
+cd "${scratch_dir}"
 
 # Permette a Python di trovare data_loader_speech.py e generate_chains.py
 export PYTHONPATH="${code_dir}:${PYTHONPATH}"
