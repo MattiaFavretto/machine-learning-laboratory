@@ -137,7 +137,7 @@ def main():
     N_TRAIN = 700 # we used 700 training samples to train the HMM
     START_STATE = 40 # Start is phoneme number 40
     
-    params = jnp.load("trained_params.npz")
+    params = jnp.load("plotting_functions/parameters_trained_params.npz")
     mean = jnp.asarray(params["mean"], dtype=jnp.float32)
     cov = jnp.asarray(params["covariance"], dtype=jnp.float32)
     A = jnp.asarray(params["A"], dtype=jnp.float32)

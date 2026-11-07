@@ -49,19 +49,18 @@ fi
 
 cd "${work_dir}"
 
-# 5. Recupero del file trained_params.npz (generato da project_1.py)
-if [ -f "${final_dir}/trained_params.npz" ]; then
+# 5. Recupero del file trained_params.npz e collegamento di plotting_functions
+if [ "${final_dir}" != "${work_dir}" ] && [ -f "${final_dir}/trained_params.npz" ]; then
     echo "Copia di trained_params.npz da ${final_dir} in ${work_dir}..."
     cp "${final_dir}/trained_params.npz" "${work_dir}/"
-elif [ -f "${code_dir}/trained_params.npz" ]; then
+elif [ "${code_dir}" != "${work_dir}" ] && [ -f "${code_dir}/trained_params.npz" ]; then
     echo "Copia di trained_params.npz da ${code_dir} in ${work_dir}..."
     cp "${code_dir}/trained_params.npz" "${work_dir}/"
-elif [ -f "trained_params.npz" ]; then
-    echo "File trained_params.npz già presente nella cartella di lavoro."
-else
-    echo "[ERRORE] File trained_params.npz non trovato né in ${final_dir} né in ${code_dir}!"
-    echo "Assicurati di aver eseguito con successo project_1.py prima di lanciare Viterbi."
-    exit 1
+fi
+
+# Rende accessibile la cartella plotting_functions/ anche da dentro work_dir
+if [ ! -e "${work_dir}/plotting_functions" ] && [ -d "${code_dir}/plotting_functions" ]; then
+    ln -s "${code_dir}/plotting_functions" "${work_dir}/plotting_functions" 2>/dev/null || true
 fi
 
 # 6. Variabili d'ambiente per Python
@@ -71,6 +70,15 @@ export PYTHONUNBUFFERED=1
 # 7. Esecuzione della decodifica Viterbi (Punto e)
 echo "Avvio di viterbi_hmm.py..."
 python -u "${code_dir}/viterbi_hmm.py"
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -ne 0 ]; then
+    echo "=========================================================="
+    echo "[ERRORE] viterbi_hmm.py è fallito con codice di uscita: $EXIT_CODE"
+    echo "Controlla il traceback sopra per i dettagli dell'errore."
+    echo "=========================================================="
+    exit $EXIT_CODE
+fi
 
 # 8. Generazione automatica dei grafici degli errori (istogrammi punto e)
 if [ -f "${work_dir}/viterbi_results.npz" ]; then
