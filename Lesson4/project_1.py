@@ -253,7 +253,7 @@ def main():
     # create random values for the two gaussian
     seed = 1701
     k1 = rnd.key(seed) # unless they will have the same value
-    epochs = 30
+    epochs = 10
     num_training_sentences = 700
 
     # Test for point b) of the project
