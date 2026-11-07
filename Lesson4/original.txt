@@ -1,0 +1,97 @@
+@jit
+def step_e(x,y,mean,covariance, A):
+    # Get di length (n) of the sentence and map the indeces of sentence phonemes considering the global list of phonems
+    n = len(y)
+    num_gauss = mean.shape[0]
+
+    # Calculate the multivariate logpdf, the pdf gives 0.0 
+    pdf = multivariate_normal.logpdf(
+        x[:, None, :], mean=mean[y][None, :, :], cov=covariance[y][None, :, :, :]
+    )
+
+    # Initialize alfa and beta inside the function to deal also with sentences with different length
+    pi = jnp.zeros(n).at[0].set(1.0)
+    pi = jnp.log(pi) # move to log space
+    initial_alpha = pi + pdf[0]
+    c_0 = logsumexp(initial_alpha)
+    initial_alpha -= c_0
+
+    final_beta = jnp.full(n, -jnp.inf).at[-1].set(0.0)
+
+    # Create the A matrix for this situation A_sub[i, j] = A[p(i), p(j)]
+    A_sub = A[y[:, None], y[None, :]]
+
+    # maske to only have left-to-right
+    mask = jnp.eye(n) + jnp.eye(n, k=1)
+    A_step = A_sub * mask   # rows do not sum to 1
+    A_step = jnp.log(A_step) # move to log space
+
+    # Calculate the initial alpha and final beta
+    # defined inside of the one_step_em function to access gauss and A
+    def forward_step(carry,pdf_t):
+        # the forward_step function need to respect the scan function requirement
+        old_alpha = carry
+
+        # I need to repeat this for every k
+        new_alpha = pdf_t + logsumexp(old_alpha[:, None] + A_step, axis=0)
+        new_c = logsumexp(new_alpha)
+        new_alpha -= new_c
+
+        return new_alpha, (new_alpha, new_c)
+
+    def backaward_step(carry,input):
+        # the backward_step function need to respect the scan function requirement
+        old_beta = carry
+        pdf_t, c_t = input
+        # I need to repeat this for every k
+        new_beta = logsumexp(A_step + (pdf_t + old_beta)[None, :], axis=1) - c_t
+
+        return new_beta, new_beta
+
+    def compute_step_csi(c_t,pdf_t,alpha_t,beta_t):
+        csi_n = jnp.exp(alpha_t[:, None] + A_step + (pdf_t + beta_t)[None, :] - c_t)
+        return csi_n
+
+    compute_csi = vmap(compute_step_csi,in_axes=(0,0,0,0))
+
+    # Calculate the forward step
+    _,output_forward = lax.scan(forward_step,initial_alpha,pdf[1:],reverse=False)
+    alpha, c = output_forward
+    alpha = jnp.vstack([initial_alpha[None, :], alpha])
+    c = jnp.concatenate([jnp.array([c_0]),c])
+
+    # Poiche la catena termina nello stato n-1, final_beta[-1] = -alpha[-1, -1]
+    # rende gamma e csi delle vere PMF (somma = 1 a ogni istante t) ed evita l'underflow!
+    final_beta = jnp.full(n, -jnp.inf).at[-1].set(-alpha[-1, -1])
+
+    # Calculate the backward step
+    _,beta = lax.scan(backaward_step,final_beta,(pdf[1:],c[1:]),reverse=True) # it is [1:] because the reverse starts form the last element
+    beta = jnp.vstack([beta, final_beta[None, :]])
+
+    # Calculate the parameters for our sentence
+    # responsability
+    responsability_step = jnp.exp(alpha + beta)
+    # transition probability
+    csi_step = compute_csi(c[1:],pdf[1:],alpha[:-1],beta[1:])
+
+    # Adapt responsability and csi to the global case
+    # for the responsability we want to go from (n,n) to (n,k)
+    responsability_global = jnp.zeros((x.shape[0], num_gauss))
+    responsability_global = responsability_global.at[:, y].add(responsability_step)
+
+    # sum over every time
+    csi_step_sum = jnp.sum(csi_step, axis=0)
+
+    row_idx = y[:, None]  # shape (n, 1)
+    col_idx = y[None, :]  # shape (1, n)
+
+    # creating a (k,k) matrix
+    csi_global_sum = jnp.zeros((num_gauss, num_gauss))
+    csi_global_sum = csi_global_sum.at[row_idx, col_idx].add(csi_step_sum)
+
+    # Calculation of the Log Likelihood
+    ll = jnp.sum(c) + alpha[-1, -1]
+
+    # Return responsability and csi to be summed over every sequence
+    return responsability_global, csi_global_sum, ll
+# END FUNCTION STEP_E

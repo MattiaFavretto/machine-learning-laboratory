@@ -1,7 +1,18 @@
-# Punto c)
+file project_1.py
 
-restituire array LL (in un file?)
-restituire A, media e covarianza, così mi tengo salvati i valori che ho ottenuto dal training 
+1)
+ipa_dict = {a[0]: a[1] for a in dl.read_csv('/share/datasets/LJSpeech-1.1/sphinxdict/toIPA.csv')}
+        ipa_dict["SIL"] = " "
+        ipa_dict["START"] = ""
+        ipa_dict["END"] = ""
+        phonemes_ipa = [ipa_dict.get(p, p) for p in phonemes_list]
 
-# Punto d) 
-come lo posso fare?
+questo pezzo di codice deve essere assolutamente sostituito con una funzione di data loader. 
+
+2) pdf_i = multivariate_normal(x[:,:,None,:], mean, covariance) -- come mai quelle cose sulla x?
+3) responsability, csi, ll = vmap(step_e, in_axes=(0,0,0,0,0,None))(pdf,x,y,T_true,n_true,A) .... a cosa serve la seconda parentesi alla fine
+4) capire come mai si usa e come si fa l'aggiornamento con Nk,Sx,Sxx (scrivere formule sul tablet)
+
+file viterbi_hmm
+
+1) algoritmo di Levenshtein usa programmazione dinamica, dovrei vederla
