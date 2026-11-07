@@ -1,11 +1,6 @@
-from jax import jit, numpy as jnp, vmap, lax
+from jax import jit, numpy as jnp, lax
 import numpy as jnp
 from jax.scipy.stats import multivariate_normal
-import timeit
-from functools import partial
-import os
-import argparse
-from jax.scipy.linalg import solve_triangular
 from scipy.special import softmax
 import data_loader_speech as dl
 from generate_chains import generate_chains
@@ -176,8 +171,8 @@ def main():
         chain = generate_chains(k,1,length=len(x),d=d,μ=jnp.asarray(mean),Σ=jnp.asarray(cov),transition_probs=A,initial_probs=init_probs)[0]
         random_errors.append(lev.distance(jnp.asarray(chain[2]), y) / len(y))
 
-        viterbi_errors = jnp.array(viterbi_errors)
-        random_errors = jnp.array(random_errors)
+    viterbi_errors = jnp.array(viterbi_errors)
+    random_errors = jnp.array(random_errors)
 
     # save informations in a npz file to be used in the report and printed with a different file
     jnp.savez("viterbi_results.npz",viterbi_errors=viterbi_errors,viterbi_mean_error=float(viterbi_errors.mean()),random_errors=random_errors,random_mean_error=float(random_errors.mean()),h=BEST,n_train=N_TRAIN)
